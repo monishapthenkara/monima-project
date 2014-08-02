@@ -1,0 +1,82 @@
+from openerp.osv import fields, osv
+from openerp import tools
+
+class item_details(osv.osv):
+    _name = 'item.details'
+    def _get_image(self, cr, uid, ids, name, args, context=None):
+        result = dict.fromkeys(ids, False)
+        for obj in self.browse(cr, uid, ids, context=context):
+            result[obj.id] = tools.image_get_resized_images(obj.image)
+        return result    
+    def _set_image(self, cr, uid, id, name, value, args, context=None):
+        return self.write(cr, uid, [id], {'image': tools.image_resize_image_big(value)}, context=context)
+    _columns={
+             'name': fields.char('ITEMS'),
+             'price': fields.integer('PRICE'),
+             'time':fields.datetime('Date'),
+             'image': fields.binary("PHOTO"),
+             'image_medium': fields.function(_get_image, fnct_inv=_set_image,
+            string="Medium-sized photo", type="binary", multi="_get_image",
+            store = {
+                'item.details': (lambda self, cr, uid, ids, c={}: ids, ['image'], 10),
+            },),
+             
+              'image_small': fields.function(_get_image, fnct_inv=_set_image,
+            string="Smal-sized photo", type="binary", multi="_get_image",
+            store = {
+                'item.details': (lambda self, cr, uid, ids, c={}: ids, ['image'], 10),
+            },),
+             
+         }
+  
+   
+item_details()
+
+class bill_order(osv.osv):
+    _name = 'bill.order'
+   
+    def button_dummy(self, cr, uid, ids, context=None):
+        return self.write(cr, uid, ids, {}, context=context)
+    def _amount_all(self, cr, uid, ids, field_name, arg, context=None):
+        res = {}
+        for order in self.browse(cr, uid, ids, context=context):
+            res[order.id] = {
+                'amount_total': 0.0,
+            }
+            val1=0.0
+            for line in order.order_line_ids:
+                print order.order_line_ids
+                val1 += line.balance
+                res[order.id]['amount_total'] =  val1
+        return res
+    _columns = {
+        'customer': fields.char('CUSTOMER NAME'),
+        'bill_no': fields.char('BILL NO'),
+        'order_line_ids':fields.one2many('bill.order.details.line','order_line_id','Bill Order Line'),
+        'orders':fields.many2many('item.details','item_bil_rel','bill_id','item_id','ORDERS'),
+        'amount_total':fields.function(_amount_all, string='Amount Total',type='float',multi="amount_total",store=True),
+        }
+bill_order()
+class order_details_line(osv.osv):
+    _name='bill.order.details.line'
+    def _quantity_price(self, cr, uid, ids, fields, args, context=None):
+        res = {}
+        for x in self.browse(cr, uid, ids, context=context):
+            res[x.id]={'price':0.0,'quantity':0.0,'total':0.0}
+            res[x.id]['balance'] = x.price * x.quantity
+        return res
+    def onchange_name(self, cr, uid, ids,name,context=None):
+        res = {}
+        if name:
+            billorder = self.pool.get('item.details')
+            billorder_obj=billorder.browse(cr, uid, name, context=context)
+            res['value']={'price':billorder_obj.price or False}
+        return res
+    _columns={
+                   'order_line_id':fields.many2one('bill.order','Customer'),
+                   'name':fields.many2one('item.details','Items'),
+                   'price':fields.float('Price'),
+                   'quantity':fields.float('Quantity'),
+                   'balance': fields.function(_quantity_price, string='Total', type='float', multi="balance_pat",store=True),
+                   }
+order_details_line()
